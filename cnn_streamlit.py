@@ -1,17 +1,14 @@
 """
-Fashion MNIST — Streamlit UI
-=============================
-Make sure FastAPI is running first:
-    uvicorn fashion_api:app --reload
-
-Then run this:
-    streamlit run streamlit_app.py
+Fashion MNIST — Standalone Streamlit App (No FastAPI needed)
+=============================================================
+Works locally AND on Streamlit Cloud.
+Run: streamlit run cnn_streamlit.py
 """
 
-import streamlit as st
-import requests
-from PIL import Image
 import io
+import numpy as np
+import streamlit as st
+from PIL import Image
 import plotly.graph_objects as go
 
 # ─────────────────────────────────────────────────────────────
@@ -24,34 +21,64 @@ st.set_page_config(
 )
 
 # ─────────────────────────────────────────────────────────────
-# FastAPI URL
+# Label map
 # ─────────────────────────────────────────────────────────────
-API_URL = "http://127.0.0.1:8000"
+LABEL_NAMES = {
+    0: "T-shirt/top",
+    1: "Trouser",
+    2: "Pullover",
+    3: "Dress",
+    4: "Coat",
+    5: "Sandal",
+    6: "Shirt",
+    7: "Sneaker",
+    8: "Bag",
+    9: "Ankle boot"
+}
 
 # ─────────────────────────────────────────────────────────────
-# Header
+# Load model — cached so it only loads once
+# ─────────────────────────────────────────────────────────────
+@st.cache_resource
+def load_model():
+    import tensorflow as tf
+    try:
+        model = tf.keras.models.load_model("fashionmnist.keras")
+        return model, None
+    except Exception as e:
+        return None, str(e)
+
+# ─────────────────────────────────────────────────────────────
+# Preprocess image
+# ─────────────────────────────────────────────────────────────
+def preprocess(file_bytes: bytes) -> np.ndarray:
+    img = (Image.open(io.BytesIO(file_bytes))
+                 .convert("L")        # grayscale
+                 .resize((28, 28)))   # 28x28
+    arr = np.array(img, dtype=np.float32) / 255.0
+    return arr.reshape(1, 28, 28, 1)  # (1, 28, 28, 1)
+
+# ─────────────────────────────────────────────────────────────
+# UI
 # ─────────────────────────────────────────────────────────────
 st.title("👗 Fashion MNIST Classifier")
 st.markdown("Upload a clothing image and the AI will predict what it is.")
 st.divider()
 
-# ─────────────────────────────────────────────────────────────
-# Check if API is running
-# ─────────────────────────────────────────────────────────────
-try:
-    health = requests.get(f"{API_URL}/", timeout=3)
-    if health.status_code == 200 and health.json().get("model_loaded"):
-        st.success("✅ FastAPI server is running and model is loaded!")
-    else:
-        st.error("⚠️ Server is up but model failed to load.")
-except Exception:
-    st.error("❌ FastAPI server is not running. Start it with: `uvicorn fashion_api:app --reload`")
+# Load model
+model, error = load_model()
+
+if error:
+    st.error(f"❌ Could not load model: {error}")
+    st.info("Make sure `fashionmnist.keras` is in the same folder as this script.")
     st.stop()
+else:
+    st.success("✅ Model loaded successfully!")
 
 st.divider()
 
 # ─────────────────────────────────────────────────────────────
-# Image Upload
+# Upload
 # ─────────────────────────────────────────────────────────────
 uploaded_file = st.file_uploader(
     "Upload a clothing image (JPG / PNG)",
@@ -59,62 +86,42 @@ uploaded_file = st.file_uploader(
 )
 
 if uploaded_file:
+    file_bytes = uploaded_file.read()
+
     col1, col2 = st.columns(2)
 
-    # Show uploaded image
     with col1:
         st.subheader("📷 Uploaded Image")
-        img = Image.open(uploaded_file)
+        img = Image.open(io.BytesIO(file_bytes))
         st.image(img, use_container_width=True)
 
-    # Send to FastAPI and show result
     with col2:
         st.subheader("🤖 Prediction")
         with st.spinner("Classifying..."):
             try:
-                uploaded_file.seek(0)
-                response = requests.post(
-                    f"{API_URL}/predict",
-                    files={"file": (uploaded_file.name,
-                                    uploaded_file.read(),
-                                    uploaded_file.type)},
-                    timeout=10
-                )
+                arr         = preprocess(file_bytes)
+                preds       = model.predict(arr, verbose=0)[0]   # shape (10,)
+                pred_idx    = int(np.argmax(preds))
+                pred_label  = LABEL_NAMES[pred_idx]
+                confidence  = float(preds[pred_idx]) * 100
 
-                if response.status_code == 200:
-                    result = response.json()
-
-                    # Main prediction
-                    st.metric(
-                        label="Predicted Class",
-                        value=result["predicted_label"],
-                    )
-                    st.metric(
-                        label="Confidence",
-                        value=f"{result['confidence']}%"
-                    )
-
-                else:
-                    st.error(f"API Error {response.status_code}: {response.json().get('detail')}")
-                    result = None
+                st.metric("Predicted Class", pred_label)
+                st.metric("Confidence", f"{confidence:.2f}%")
 
             except Exception as e:
-                st.error(f"Request failed: {e}")
-                result = None
+                st.error(f"Prediction failed: {e}")
+                preds = None
 
     # ── Probability bar chart ─────────────────────────────────
-    if uploaded_file and result:
+    if preds is not None:
         st.divider()
         st.subheader("📊 All Class Probabilities")
 
-        probs  = result["all_probabilities"]
-        labels = list(probs.keys())
-        values = list(probs.values())
-
-        # Highlight the predicted bar
+        labels = list(LABEL_NAMES.values())
+        values = [float(p) * 100 for p in preds]
         colors = [
-            "#2ecc71" if lbl == result["predicted_label"] else "#3498db"
-            for lbl in labels
+            "#2ecc71" if i == pred_idx else "#3498db"
+            for i in range(10)
         ]
 
         fig = go.Figure(go.Bar(
@@ -124,25 +131,22 @@ if uploaded_file:
             text=[f"{v:.1f}%" for v in values],
             textposition="outside"
         ))
-
         fig.update_layout(
             yaxis_title="Probability (%)",
             xaxis_title="Class",
-            yaxis=dict(range=[0, max(values) * 1.2]),
+            yaxis=dict(range=[0, max(values) * 1.25]),
             plot_bgcolor="rgba(0,0,0,0)",
             paper_bgcolor="rgba(0,0,0,0)",
-            height=400,
+            height=420,
             margin=dict(t=20, b=20),
         )
-
         st.plotly_chart(fig, use_container_width=True)
 
-        # ── Raw JSON result ───────────────────────────────────
-        with st.expander("🔍 Raw API Response"):
-            st.json(result)
+        # Raw probabilities
+        with st.expander("🔍 Raw Probabilities"):
+            for i, (lbl, prob) in enumerate(zip(labels, values)):
+                st.write(f"**{lbl}**: {prob:.2f}%")
 
-# ─────────────────────────────────────────────────────────────
-# Footer
-# ─────────────────────────────────────────────────────────────
 st.divider()
+st.caption("Powered by TensorFlow + Streamlit")
 st.caption("Powered by FastAPI + TensorFlow + Streamlit")
