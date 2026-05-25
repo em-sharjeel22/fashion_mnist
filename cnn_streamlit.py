@@ -9,7 +9,6 @@ import io
 import numpy as np
 import streamlit as st
 from PIL import Image
-import plotly.express as px
 # ─────────────────────────────────────────────────────────────
 # Page config
 # ─────────────────────────────────────────────────────────────
@@ -123,25 +122,6 @@ if uploaded_file:
             for i in range(10)
         ]
 
-        fig = px.bar(
-         x=labels,
-         y=values
-        )
-        fig.update_layout(
-            yaxis_title="Probability (%)",
-            xaxis_title="Class",
-            yaxis=dict(range=[0, max(values) * 1.25]),
-            plot_bgcolor="rgba(0,0,0,0)",
-            paper_bgcolor="rgba(0,0,0,0)",
-            height=420,
-            margin=dict(t=20, b=20),
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
-        # Raw probabilities
-        with st.expander("🔍 Raw Probabilities"):
-            for i, (lbl, prob) in enumerate(zip(labels, values)):
-                st.write(f"**{lbl}**: {prob:.2f}%")
 
 st.divider()
 st.caption("Powered by TensorFlow + Streamlit")
