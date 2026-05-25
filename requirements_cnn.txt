@@ -1,0 +1,19 @@
+# Web Framework
+fastapi
+uvicorn[standard]
+python-multipart
+
+# UI
+streamlit
+plotly
+
+# Image Processing
+pillow
+
+# Data & ML
+numpy
+pandas
+tensorflow
+scikit-learn
+matplotlib
+seaborn
