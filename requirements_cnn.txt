@@ -8,17 +8,11 @@ streamlit
 plotly
 
 # Image Processing
-pillow
+Pillow
 
 # Data & ML
 numpy
 pandas
-tensorflow
+tensorflow==2.15.0
 scikit-learn
 matplotlib
-seaborn
-streamlit
-tensorflow
-plotly
-numpy
-Pillow
