@@ -9,8 +9,7 @@ import io
 import numpy as np
 import streamlit as st
 from PIL import Image
-import plotly.graph_objects as go
-
+import plotly.express as px
 # ─────────────────────────────────────────────────────────────
 # Page config
 # ─────────────────────────────────────────────────────────────
@@ -124,13 +123,10 @@ if uploaded_file:
             for i in range(10)
         ]
 
-        fig = go.Figure(go.Bar(
-            x=labels,
-            y=values,
-            marker_color=colors,
-            text=[f"{v:.1f}%" for v in values],
-            textposition="outside"
-        ))
+        fig = px.bar(
+         x=labels,
+         y=values
+        )
         fig.update_layout(
             yaxis_title="Probability (%)",
             xaxis_title="Class",
